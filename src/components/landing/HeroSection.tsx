@@ -49,14 +49,14 @@ const HeroSection = ({ onScrollToSamples, onScrollToBuilder }: HeroSectionProps)
   return (
     <section className="relative h-screen w-full flex flex-col justify-center items-center text-center overflow-hidden pt-20">
       {/* Background Video */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <HeroVideo />
         {/* Subtle blur + dark overlay — CSS filter on a thin overlay, not on video itself */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 z-[1]"
           style={{ backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}
         />
-        <div className="absolute inset-0 bg-background/75" />
+        <div className="absolute inset-0 z-[2] bg-background/75" />
       </div>
 
       {/* Hero Content */}
