@@ -165,25 +165,43 @@ Write the Imagen 3 prompt now.`,
     // ============================
     console.log("Step 3: Generating image with Imagen 3...");
 
-    const imagenResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GOOGLE_AI_STUDIO_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instances: [{ prompt: imagenPrompt }],
-          parameters: {
-            sampleCount: 1,
-            aspectRatio: "1:1",
-          },
-        }),
-      }
-    );
+    // Try imagen-3.0-generate-002 first, fall back to imagen-4.0-generate-001
+    const modelsToTry = ["imagen-3.0-generate-002", "imagen-4.0-generate-001"];
+    let imagenResp: Response | null = null;
+    let lastError = "";
 
-    if (!imagenResp.ok) {
-      const errText = await imagenResp.text();
-      console.error("Imagen 3 error:", imagenResp.status, errText);
-      throw new Error(`Image generation failed: ${imagenResp.status}`);
+    for (const modelName of modelsToTry) {
+      console.log(`Trying model: ${modelName}`);
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GOOGLE_AI_STUDIO_API_KEY,
+          },
+          body: JSON.stringify({
+            instances: [{ prompt: imagenPrompt }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: "1:1",
+            },
+          }),
+        }
+      );
+
+      if (resp.ok) {
+        imagenResp = resp;
+        break;
+      }
+
+      lastError = await resp.text();
+      console.warn(`Model ${modelName} failed (${resp.status}):`, lastError);
+    }
+
+    if (!imagenResp) {
+      console.error("All Imagen models failed. Last error:", lastError);
+      throw new Error(`Image generation failed. Ensure your Google AI Studio API key has Imagen access enabled.`);
     }
 
     const imagenData = await imagenResp.json();
