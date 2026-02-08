@@ -34,9 +34,6 @@ serve(async (req) => {
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not configured");
 
-    const GOOGLE_AI_STUDIO_API_KEY = Deno.env.get("GOOGLE_AI_STUDIO_API_KEY");
-    if (!GOOGLE_AI_STUDIO_API_KEY) throw new Error("GOOGLE_AI_STUDIO_API_KEY is not configured");
-
     // ============================
     // STEP 1: Analyze product image via OpenRouter Vision (if provided)
     // ============================
@@ -88,7 +85,7 @@ serve(async (req) => {
     }
 
     // ============================
-    // STEP 2: Engineer a prompt for Imagen 3 via OpenRouter
+    // STEP 2: Engineer a prompt for image generation via OpenRouter
     // ============================
     console.log("Step 2: Engineering image generation prompt...");
 
@@ -108,7 +105,7 @@ serve(async (req) => {
     const promptEngineerMessages = [
       {
         role: "system",
-        content: `You are a Prompt Engineer for Google Imagen 3. Your goal is to write a single, detailed prompt that results in a 1080x1080 square marketing image. The image must:
+        content: `You are a Prompt Engineer for an AI image generator. Your goal is to write a single, detailed prompt that results in a 1080x1080 square marketing image. The image must:
 1. Feature the text "${headlineText}" rendered clearly and legibly as part of the design
 2. Match the visual style: ${styleDesc}
 3. Use the brand color ${brandColor} as a dominant accent
@@ -131,7 +128,7 @@ Headline Text: "${headlineText}"
 Visual Style: ${visualStyle}
 Brand Color: ${brandColor}${productSection}
 
-Write the Imagen 3 prompt now.`,
+Write the image generation prompt now.`,
       },
     ];
 
@@ -161,58 +158,44 @@ Write the Imagen 3 prompt now.`,
     if (!imagenPrompt) throw new Error("Failed to generate image prompt");
 
     // ============================
-    // STEP 3: Generate image via Google AI Studio Imagen 3
+    // STEP 3: Generate image via OpenRouter (sourceful/riverflow-v2-pro)
     // ============================
-    console.log("Step 3: Generating image with Imagen 3...");
+    console.log("Step 3: Generating image with sourceful/riverflow-v2-pro...");
 
-    // Try imagen-3.0-generate-002 first, fall back to imagen-4.0-generate-001
-    const modelsToTry = ["imagen-3.0-generate-002", "imagen-4.0-generate-001"];
-    let imagenResp: Response | null = null;
-    let lastError = "";
+    const imageGenResp = await fetch("https://openrouter.ai/api/v1/images/generations", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "sourceful/riverflow-v2-pro",
+        prompt: imagenPrompt,
+        n: 1,
+        size: "1024x1024",
+        response_format: "b64_json",
+      }),
+    });
 
-    for (const modelName of modelsToTry) {
-      console.log(`Trying model: ${modelName}`);
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GOOGLE_AI_STUDIO_API_KEY,
-          },
-          body: JSON.stringify({
-            instances: [{ prompt: imagenPrompt }],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: "1:1",
-            },
-          }),
-        }
-      );
-
-      if (resp.ok) {
-        imagenResp = resp;
-        break;
-      }
-
-      lastError = await resp.text();
-      console.warn(`Model ${modelName} failed (${resp.status}):`, lastError);
+    if (!imageGenResp.ok) {
+      const errText = await imageGenResp.text();
+      console.error("Image generation error:", imageGenResp.status, errText);
+      throw new Error(`Image generation failed: ${imageGenResp.status} - ${errText}`);
     }
 
-    if (!imagenResp) {
-      console.error("All Imagen models failed. Last error:", lastError);
-      throw new Error(`Image generation failed. Ensure your Google AI Studio API key has Imagen access enabled.`);
+    const imageGenData = await imageGenResp.json();
+    console.log("Image gen response keys:", Object.keys(imageGenData));
+
+    // Handle both OpenAI-style responses
+    let imageDataUrl = "";
+    if (imageGenData.data?.[0]?.b64_json) {
+      imageDataUrl = `data:image/png;base64,${imageGenData.data[0].b64_json}`;
+    } else if (imageGenData.data?.[0]?.url) {
+      imageDataUrl = imageGenData.data[0].url;
+    } else {
+      console.error("Unexpected image gen response:", JSON.stringify(imageGenData).slice(0, 500));
+      throw new Error("No image was generated");
     }
-
-    const imagenData = await imagenResp.json();
-    const imageBase64 = imagenData.predictions?.[0]?.bytesBase64Encoded;
-
-    if (!imageBase64) {
-      console.error("Imagen response:", JSON.stringify(imagenData));
-      throw new Error("No image was generated by Imagen 3");
-    }
-
-    const imageDataUrl = `data:image/png;base64,${imageBase64}`;
 
     // ============================
     // STEP 4: Generate matching caption via OpenRouter

@@ -1,35 +1,38 @@
 import { motion } from "framer-motion";
+import sampleCrocs from "@/assets/sample-crocs.jpeg";
+import sampleBurger from "@/assets/sample-burger.jpeg";
+import sampleWinter from "@/assets/sample-winter.jpeg";
 
 const samples = [
   {
-    gradient: "bg-gradient-to-br from-[#FF6B6B] to-[#556270]",
-    handle: "@glowup_cosmetics",
-    ctr: "4.2% CTR",
-    category: "Beauty",
-    title: "Glow Serum Launch",
-    description: "Vibrant colors, high energy.",
+    image: sampleCrocs,
+    handle: "@crocs",
+    ctr: "4.8% CTR",
+    category: "Fashion",
+    title: "Crocs Brand Campaign",
+    description: "Monochrome product showcase, premium feel.",
+    likes: "15.2k",
+    shares: "3.4k",
+  },
+  {
+    image: sampleBurger,
+    handle: "@burger_house",
+    ctr: "5.1% CTR",
+    category: "Food",
+    title: "Burger Promo Ad",
+    description: "Bold typography, vibrant food photography.",
     likes: "12.4k",
     shares: "2.1k",
   },
   {
-    gradient: "bg-gradient-to-br from-[#4ECDC4] to-[#556270]",
-    handle: "@tech_gadgets",
-    ctr: "3.8% CTR",
-    category: "Tech",
-    title: "Headphone Promo",
-    description: "Sleek dark mode aesthetic.",
+    image: sampleWinter,
+    handle: "@digitalsulaha",
+    ctr: "3.9% CTR",
+    category: "Fashion",
+    title: "Winter Sale Campaign",
+    description: "Dramatic icy theme, clear CTA placement.",
     likes: "8.5k",
     shares: "1.2k",
-  },
-  {
-    gradient: "bg-gradient-to-br from-[#A770EF] via-[#CF8BF3] to-[#FDB99B]",
-    handle: "@urban_shoes",
-    ctr: "5.1% CTR",
-    category: "Fashion",
-    title: "Summer Collection",
-    description: "Minimalist layout, product focus.",
-    likes: "15.2k",
-    shares: "3.4k",
   },
 ];
 
@@ -74,7 +77,11 @@ const SamplesSection = ({ sectionRef }: SamplesSectionProps) => {
           >
             {/* Image Area */}
             <div className="h-[380px] relative overflow-hidden">
-              <div className={`w-full h-full ${sample.gradient} transition-transform duration-500 group-hover:scale-105`} />
+              <img
+                src={sample.image}
+                alt={sample.title}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
               <div className="absolute top-4 left-4 flex items-center gap-2 bg-[rgba(0,0,0,0.4)] backdrop-blur-lg px-3 py-1.5 rounded-full text-xs font-medium">
                 <InstagramIcon />
                 <span>{sample.handle}</span>
