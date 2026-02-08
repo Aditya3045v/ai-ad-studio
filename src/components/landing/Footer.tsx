@@ -2,14 +2,12 @@ const Footer = () => {
   return (
     <footer className="flex flex-col gap-[37px] w-full px-5 py-5 overflow-hidden">
       {/* Brand Name */}
-      <div className="flex flex-row gap-2.5 w-full items-start justify-start overflow-hidden">
+      <div className="flex flex-row gap-2.5 w-full items-center justify-center overflow-hidden">
         <h2
-          className="text-[clamp(60px,12vw,190px)] leading-[0.8em] tracking-normal text-left whitespace-pre font-heading font-semibold"
+          className="text-[clamp(60px,12vw,190px)] leading-[0.8em] tracking-normal text-center whitespace-pre font-heading font-semibold"
           style={{ fontFamily: "'Outfit', sans-serif" }}
         >
-          <span style={{ color: "rgb(255, 241, 210)" }}>AMO</span>
-          <span style={{ color: "rgb(179, 179, 179)" }}> </span>
-          <span style={{ color: "rgb(255, 255, 255)" }}>PIctures</span>
+          AdGen
         </h2>
       </div>
 
