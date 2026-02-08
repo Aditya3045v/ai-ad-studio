@@ -4,6 +4,7 @@ import HeroSection from "@/components/landing/HeroSection";
 import TrustedBy from "@/components/landing/TrustedBy";
 import SamplesSection from "@/components/landing/SamplesSection";
 import BuilderSection from "@/components/landing/BuilderSection";
+import Footer from "@/components/landing/Footer";
 
 const Index = () => {
   const samplesRef = useRef<HTMLElement>(null);
@@ -24,6 +25,7 @@ const Index = () => {
       <TrustedBy />
       <SamplesSection sectionRef={samplesRef} />
       <BuilderSection sectionRef={builderRef} />
+      <Footer />
     </div>
   );
 };
