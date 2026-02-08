@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, ImageIcon, Loader2, X, Check, Download } from "lucide-react";
+import { Upload, Loader2, X, Check, Download, Copy, Sparkles, Image as ImageIcon, Palette } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -8,347 +8,530 @@ interface BuilderSectionProps {
   sectionRef: React.RefObject<HTMLElement>;
 }
 
+const INDUSTRIES = ["Fashion", "Food", "Tech", "Beauty", "Real Estate"];
+const THEMES = ["Diwali", "New Year", "Sale", "Launch", "Minimal"];
+const STYLES = ["Photorealistic", "Neon", "Pastel", "Luxury"];
+
+const PIPELINE_STEPS = [
+  { label: "Analyzing product", icon: "🔍" },
+  { label: "Engineering prompt", icon: "🧠" },
+  { label: "Generating image", icon: "🎨" },
+  { label: "Writing caption", icon: "✍️" },
+];
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 const BuilderSection = ({ sectionRef }: BuilderSectionProps) => {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const productInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
-  const [productImageUrl, setProductImageUrl] = useState<string | null>(null);
-  const [localPreview, setLocalPreview] = useState<string | null>(null);
-  const [description, setDescription] = useState("");
-  const [platform, setPlatform] = useState("Instagram Story");
-  const [tone, setTone] = useState("Professional");
-  const [aspectRatio, setAspectRatio] = useState("9:16 (Story)");
-  const [email, setEmail] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [brandName, setBrandName] = useState("");
+  const [industry, setIndustry] = useState(INDUSTRIES[0]);
+  const [theme, setTheme] = useState(THEMES[0]);
+  const [headlineText, setHeadlineText] = useState("");
+  const [visualStyle, setVisualStyle] = useState(STYLES[0]);
+  const [brandColor, setBrandColor] = useState("#8B5CF6");
+
+  // File state
+  const [productFile, setProductFile] = useState<File | null>(null);
+  const [productPreview, setProductPreview] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [currentStep, setCurrentStep] = useState(-1);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [showResults, setShowResults] = useState(false);
+  const [generatedCaption, setGeneratedCaption] = useState<string | null>(null);
+  const [captionCopied, setCaptionCopied] = useState(false);
 
-  const uploadFile = async (file: File) => {
+  const handleFileSelect = (
+    file: File | undefined,
+    setFile: (f: File | null) => void,
+    setPreview: (s: string | null) => void
+  ) => {
+    if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max file size is 5MB.", variant: "destructive" });
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Max size is 10MB.", variant: "destructive" });
       return;
     }
-
-    // Show local preview immediately
+    setFile(file);
     const reader = new FileReader();
-    reader.onload = (e) => setLocalPreview(e.target?.result as string);
+    reader.onload = (e) => setPreview(e.target?.result as string);
     reader.readAsDataURL(file);
-
-    setIsUploading(true);
-    try {
-      const ext = file.name.split(".").pop();
-      const fileName = `${crypto.randomUUID()}.${ext}`;
-      const filePath = `uploads/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("ad-assets")
-        .upload(filePath, file, { contentType: file.type });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from("ad-assets")
-        .getPublicUrl(filePath);
-
-      setProductImageUrl(urlData.publicUrl);
-    } catch (e: any) {
-      toast({ title: "Upload failed", description: e.message || "Could not upload image.", variant: "destructive" });
-      setLocalPreview(null);
-    } finally {
-      setIsUploading(false);
-    }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
-  };
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!brandName.trim() || !headlineText.trim()) {
+        toast({ title: "Missing fields", description: "Please fill in Brand Name and Main Offer.", variant: "destructive" });
+        return;
+      }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+      setIsGenerating(true);
+      setGeneratedImage(null);
+      setGeneratedCaption(null);
+      setCurrentStep(0);
 
-  const removeImage = () => {
-    setProductImageUrl(null);
-    setLocalPreview(null);
-  };
+      try {
+        let productImageBase64: string | undefined;
+        let productImageMimeType: string | undefined;
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!description.trim()) return;
+        if (productFile) {
+          productImageBase64 = await fileToBase64(productFile);
+          productImageMimeType = productFile.type;
+          setCurrentStep(0);
+        } else {
+          setCurrentStep(1);
+        }
 
-    setIsGenerating(true);
-    setShowResults(false);
-    setGeneratedImage(null);
+        // Simulate step progression with timing
+        const stepTimer = setInterval(() => {
+          setCurrentStep((prev) => {
+            if (prev < 3) return prev + 1;
+            clearInterval(stepTimer);
+            return prev;
+          });
+        }, 6000);
 
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-ad-image", {
-        body: {
-          headline: description,
-          style: "photorealistic" as const,
-          brandName: "Campaign",
-          description: `Create a ${platform} ad with a ${tone.toLowerCase()} tone. Aspect ratio: ${aspectRatio}. ${description}`,
-          logoUrl: null,
-          productImageUrl: productImageUrl,
-        },
-      });
+        const { data, error } = await supabase.functions.invoke("generate-campaign", {
+          body: {
+            brandName,
+            industry,
+            theme,
+            headlineText,
+            visualStyle,
+            brandColor,
+            productImageBase64,
+            productImageMimeType,
+          },
+        });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+        clearInterval(stepTimer);
 
-      setGeneratedImage(data.imageUrl);
-      setShowResults(true);
-    } catch (e: any) {
-      toast({
-        title: "Generation failed",
-        description: e.message || "Could not generate campaign. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [description, platform, tone, aspectRatio, productImageUrl, toast]);
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        setCurrentStep(3);
+        setGeneratedImage(data.imageUrl);
+        setGeneratedCaption(data.caption || null);
+      } catch (e: any) {
+        toast({
+          title: "Generation failed",
+          description: e.message || "Could not generate campaign. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setTimeout(() => setIsGenerating(false), 500);
+      }
+    },
+    [brandName, industry, theme, headlineText, visualStyle, brandColor, productFile, toast]
+  );
 
   const handleDownload = () => {
     if (!generatedImage) return;
     const link = document.createElement("a");
     link.href = generatedImage;
-    link.download = "adgen-campaign.png";
+    link.download = `${brandName || "adgen"}-campaign.png`;
     link.click();
   };
 
-  const previewSrc = localPreview || productImageUrl;
+  const handleCopyCaption = () => {
+    if (!generatedCaption) return;
+    navigator.clipboard.writeText(generatedCaption);
+    setCaptionCopied(true);
+    setTimeout(() => setCaptionCopied(false), 2000);
+  };
+
+  const inputClasses =
+    "w-full bg-[hsl(var(--glass-bg))] border border-[hsl(var(--glass-border))] p-3 px-4 rounded-xl text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet";
+  const labelClasses = "block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2";
+  const selectClasses = `${inputClasses} appearance-none cursor-pointer`;
 
   return (
     <section ref={sectionRef} className="py-24 px-6">
-      <div className="max-w-[1000px] mx-auto">
+      <div className="max-w-[1200px] mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] rounded-full text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-6">
-            Create
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[hsl(var(--glass-bg))] border border-[hsl(var(--glass-border))] rounded-full text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-6">
+            <Sparkles className="w-3.5 h-3.5" />
+            AI Campaign Studio
           </div>
           <h2 className="font-heading text-[40px] font-semibold mb-4">Start Your Campaign</h2>
-          <p className="text-muted-foreground">Drag, drop, and let AI handle the rest.</p>
+          <p className="text-muted-foreground max-w-md mx-auto">
+            Fill in your brand details, upload assets, and let our 3-step AI pipeline generate
+            stunning marketing creatives with matching captions.
+          </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.08)] p-6 md:p-10 rounded-3xl">
-            {/* Left Column: Image Upload */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                Product Image
-              </label>
-              <div
-                className={`border-2 border-dashed rounded-2xl h-[300px] flex justify-center items-center text-center cursor-pointer transition-all duration-300 relative overflow-hidden ${
-                  isDragging
-                    ? "border-accent-violet bg-[rgba(139,92,246,0.05)]"
-                    : "border-[rgba(255,255,255,0.08)] hover:border-accent-violet hover:bg-[rgba(139,92,246,0.05)]"
-                }`}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-              >
-                {previewSrc ? (
-                  <>
-                    <img
-                      src={previewSrc}
-                      alt="Preview"
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                    {isUploading && (
-                      <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-                        <Loader2 className="w-6 h-6 animate-spin text-accent-violet" />
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); removeImage(); }}
-                      className="absolute top-3 right-3 w-7 h-7 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                ) : (
-                  <div className="text-muted-foreground flex flex-col items-center gap-2">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                    <p className="text-sm">
-                      Drag & Drop or <span className="text-accent-violet underline">Browse</span>
-                    </p>
-                  </div>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-              </div>
-            </div>
-
-            {/* Right Column: Inputs */}
-            <div className="flex flex-col gap-0">
-              {/* Ad Description */}
-              <div className="mb-6">
-                <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                  Ad Description
-                </label>
-                <textarea
-                  placeholder="Describe your product and campaign goal..."
-                  rows={4}
-                  required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] p-3 px-4 rounded-lg text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet resize-none"
-                />
-              </div>
-
-              {/* Platform + Tone */}
-              <div className="flex gap-4 mb-6">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                    Platform
-                  </label>
-                  <select
-                    value={platform}
-                    onChange={(e) => setPlatform(e.target.value)}
-                    className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] p-3 px-4 rounded-lg text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet appearance-none cursor-pointer"
-                  >
-                    <option>Instagram Story</option>
-                    <option>Instagram Post</option>
-                    <option>WhatsApp Status</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                    Tone
-                  </label>
-                  <select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] p-3 px-4 rounded-lg text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet appearance-none cursor-pointer"
-                  >
-                    <option>Professional</option>
-                    <option>Playful</option>
-                    <option>Urgent</option>
-                    <option>Luxury</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Aspect Ratio + Email */}
-              <div className="flex gap-4 mb-6">
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                    Aspect Ratio
-                  </label>
-                  <select
-                    value={aspectRatio}
-                    onChange={(e) => setAspectRatio(e.target.value)}
-                    className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] p-3 px-4 rounded-lg text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet appearance-none cursor-pointer"
-                  >
-                    <option>9:16 (Story)</option>
-                    <option>1:1 (Square)</option>
-                    <option>4:5 (Portrait)</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground mb-2">
-                    Work Email
-                  </label>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* ========== LEFT: Form (3 cols) ========== */}
+            <div className="lg:col-span-3 bg-[hsl(var(--glass-bg))] border border-[hsl(var(--glass-border))] p-6 md:p-8 rounded-3xl space-y-5">
+              {/* Brand Name + Industry */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClasses}>Brand Name</label>
                   <input
-                    type="email"
-                    placeholder="name@company.com"
+                    type="text"
+                    placeholder="e.g. Luxe Beauty"
                     required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.08)] p-3 px-4 rounded-lg text-foreground font-sans text-sm outline-none transition-colors duration-300 focus:border-accent-violet"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label className={labelClasses}>Industry</label>
+                  <select value={industry} onChange={(e) => setIndustry(e.target.value)} className={selectClasses}>
+                    {INDUSTRIES.map((i) => (
+                      <option key={i} value={i}>
+                        {i}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Theme + Style */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClasses}>Occasion / Theme</label>
+                  <select value={theme} onChange={(e) => setTheme(e.target.value)} className={selectClasses}>
+                    {THEMES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClasses}>Visual Style</label>
+                  <select value={visualStyle} onChange={(e) => setVisualStyle(e.target.value)} className={selectClasses}>
+                    {STYLES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Headline */}
+              <div>
+                <label className={labelClasses}>Main Offer / Headline</label>
+                <input
+                  type="text"
+                  placeholder='e.g. "50% OFF — Limited Time!"'
+                  required
+                  value={headlineText}
+                  onChange={(e) => setHeadlineText(e.target.value)}
+                  className={inputClasses}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1.5 opacity-70">
+                  This text will appear directly on the generated image.
+                </p>
+              </div>
+
+              {/* Color Picker */}
+              <div>
+                <label className={labelClasses}>Brand Color</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <input
+                      type="color"
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value)}
+                      className="w-10 h-10 rounded-lg border border-[hsl(var(--glass-border))] cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-none"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={brandColor}
+                    onChange={(e) => setBrandColor(e.target.value)}
+                    className={`${inputClasses} flex-1 font-mono uppercase`}
+                    maxLength={7}
                   />
                 </div>
               </div>
 
-              {/* Consent */}
-              <div className="flex items-center gap-3 mb-6">
-                <input
-                  type="checkbox"
-                  id="consent"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  required
-                  className="w-4 h-4 rounded border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.05)] accent-accent-violet cursor-pointer"
-                />
-                <label htmlFor="consent" className="text-xs text-muted-foreground font-normal cursor-pointer">
-                  I verify that I have the rights to use this content.
-                </label>
+              {/* Image Uploads */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Product Image */}
+                <div>
+                  <label className={labelClasses}>Upload Product Image</label>
+                  <div
+                    className="border-2 border-dashed border-[hsl(var(--glass-border))] rounded-2xl h-[160px] flex justify-center items-center text-center cursor-pointer transition-all duration-300 hover:border-accent-violet hover:bg-accent-violet/5 relative overflow-hidden"
+                    onClick={() => productInputRef.current?.click()}
+                  >
+                    {productPreview ? (
+                      <>
+                        <img src={productPreview} alt="Product" className="absolute inset-0 w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProductFile(null);
+                            setProductPreview(null);
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-muted-foreground flex flex-col items-center gap-1.5 px-4">
+                        <ImageIcon className="w-8 h-8 opacity-50" />
+                        <p className="text-xs leading-tight">
+                          Upload a clear photo of your product.
+                          <br />
+                          <span className="opacity-60">AI will analyze & place it in the design.</span>
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      ref={productInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleFileSelect(e.target.files?.[0], setProductFile, setProductPreview)}
+                    />
+                  </div>
+                </div>
+
+                {/* Logo */}
+                <div>
+                  <label className={labelClasses}>Upload Brand Logo</label>
+                  <div
+                    className="border-2 border-dashed border-[hsl(var(--glass-border))] rounded-2xl h-[160px] flex justify-center items-center text-center cursor-pointer transition-all duration-300 hover:border-accent-violet hover:bg-accent-violet/5 relative overflow-hidden"
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    {logoPreview ? (
+                      <>
+                        <img src={logoPreview} alt="Logo" className="absolute inset-0 w-full h-full object-contain p-4 bg-background/50" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLogoFile(null);
+                            setLogoPreview(null);
+                          }}
+                          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-background/80 backdrop-blur-sm flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <div className="text-muted-foreground flex flex-col items-center gap-1.5 px-4">
+                        <Palette className="w-8 h-8 opacity-50" />
+                        <p className="text-xs leading-tight">
+                          Upload your logo (PNG).
+                          <br />
+                          <span className="opacity-60">Overlaid on the final design for branding.</span>
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/svg+xml,image/webp"
+                      className="hidden"
+                      onChange={(e) => handleFileSelect(e.target.files?.[0], setLogoFile, setLogoPreview)}
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Submit */}
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isGenerating}
-                className="w-full bg-foreground text-background py-3 px-8 rounded-full font-semibold text-sm border-none cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                className="w-full bg-accent-violet text-foreground py-3.5 px-8 rounded-full font-semibold text-sm border-none cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-10px_hsl(var(--accent-violet)/0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-2"
               >
-                {isGenerating ? "Generating..." : "Generate Campaign"}
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Generate Campaign
+                  </>
+                )}
               </button>
+            </div>
+
+            {/* ========== RIGHT: Preview Card (2 cols) ========== */}
+            <div className="lg:col-span-2 flex items-start justify-center">
+              <div className="w-full max-w-[360px] sticky top-24">
+                {/* Phone Frame */}
+                <div className="bg-[hsl(var(--card))] border border-[hsl(var(--glass-border))] rounded-[2rem] p-3 shadow-2xl">
+                  {/* Notch */}
+                  <div className="flex justify-center mb-2">
+                    <div className="w-24 h-5 bg-background rounded-full" />
+                  </div>
+
+                  {/* Preview Content */}
+                  <div className="rounded-2xl overflow-hidden bg-background aspect-square relative">
+                    <AnimatePresence mode="wait">
+                      {isGenerating ? (
+                        <motion.div
+                          key="loading"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="absolute inset-0 flex flex-col items-center justify-center gap-6 p-6"
+                        >
+                          <div className="relative w-16 h-16">
+                            <div className="absolute inset-0 rounded-full border-2 border-accent-violet/20" />
+                            <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-accent-violet animate-spin" />
+                            <div className="absolute inset-2 rounded-full border-2 border-transparent border-b-accent-blue animate-spin [animation-direction:reverse] [animation-duration:1.5s]" />
+                          </div>
+                          <div className="space-y-3 w-full max-w-[200px]">
+                            {PIPELINE_STEPS.map((step, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ opacity: 0.3, x: -10 }}
+                                animate={{
+                                  opacity: i <= currentStep ? 1 : 0.3,
+                                  x: 0,
+                                }}
+                                transition={{ delay: i * 0.15 }}
+                                className="flex items-center gap-2.5 text-xs"
+                              >
+                                <span className="text-base">{step.icon}</span>
+                                <span className={i <= currentStep ? "text-foreground" : "text-muted-foreground"}>
+                                  {step.label}
+                                </span>
+                                {i < currentStep && <Check className="w-3.5 h-3.5 text-success ml-auto" />}
+                                {i === currentStep && (
+                                  <Loader2 className="w-3.5 h-3.5 text-accent-violet ml-auto animate-spin" />
+                                )}
+                              </motion.div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      ) : generatedImage ? (
+                        <motion.div
+                          key="result"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="relative w-full h-full"
+                        >
+                          <img src={generatedImage} alt="Generated ad" className="w-full h-full object-cover" />
+                          {/* Logo overlay */}
+                          {logoPreview && (
+                            <img
+                              src={logoPreview}
+                              alt="Brand logo"
+                              className="absolute bottom-4 right-4 w-16 h-16 object-contain drop-shadow-lg"
+                            />
+                          )}
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="empty"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground"
+                        >
+                          <div
+                            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+                            style={{ backgroundColor: `${brandColor}15` }}
+                          >
+                            <ImageIcon className="w-8 h-8" style={{ color: brandColor }} />
+                          </div>
+                          <div className="text-center px-6">
+                            <p className="text-sm font-medium text-foreground/60">Preview</p>
+                            <p className="text-xs mt-1 opacity-50">Your generated ad will appear here</p>
+                          </div>
+                          {headlineText && (
+                            <div
+                              className="mt-2 px-4 py-2 rounded-lg text-xs font-semibold text-center max-w-[80%]"
+                              style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
+                            >
+                              "{headlineText}"
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Bottom bar */}
+                  <div className="flex justify-center gap-1.5 mt-3 mb-1">
+                    <div className="w-28 h-1 bg-foreground/20 rounded-full" />
+                  </div>
+                </div>
+
+                {/* Action Buttons (below phone) */}
+                <AnimatePresence>
+                  {generatedImage && !isGenerating && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 space-y-3"
+                    >
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="w-full bg-foreground text-background py-3 rounded-full font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download Image
+                      </button>
+
+                      {generatedCaption && (
+                        <div className="bg-[hsl(var(--glass-bg))] border border-[hsl(var(--glass-border))] rounded-2xl p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Generated Caption
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleCopyCaption}
+                              className="text-xs text-accent-violet flex items-center gap-1 hover:underline"
+                            >
+                              {captionCopied ? (
+                                <>
+                                  <Check className="w-3 h-3" /> Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" /> Copy
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-foreground/80 leading-relaxed">{generatedCaption}</p>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </form>
-
-        {/* Results Area */}
-        <AnimatePresence>
-          {showResults && generatedImage && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="mt-10 text-center"
-            >
-              <div className="mb-6">
-                <div className="w-12 h-12 bg-[#00C853] text-white rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-                  <Check className="w-6 h-6" />
-                </div>
-                <h3 className="font-heading text-xl font-semibold mb-1">Campaign Generated!</h3>
-                <p className="text-muted-foreground text-sm">Your assets are ready for download.</p>
-              </div>
-
-              <div className="max-w-[600px] mx-auto rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.08)] bg-black">
-                <img
-                  src={generatedImage}
-                  alt="Generated campaign"
-                  className="w-full h-auto"
-                />
-              </div>
-
-              <button
-                onClick={handleDownload}
-                className="mt-6 bg-transparent text-foreground py-3 px-8 rounded-full font-medium text-sm border border-[rgba(255,255,255,0.08)] cursor-pointer inline-flex items-center gap-2 transition-all duration-300 hover:border-[rgba(255,255,255,0.2)] hover:bg-[rgba(255,255,255,0.03)]"
-              >
-                <Download className="w-4 h-4" />
-                Download Image
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </section>
   );
