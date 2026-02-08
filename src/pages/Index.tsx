@@ -26,6 +26,8 @@ const Index = () => {
     industry: "",
     description: "",
     targetAudience: "",
+    logoUrl: null,
+    productImageUrl: null,
   });
   const [headlines, setHeadlines] = useState<Headline[]>([]);
   const [selectedHeadline, setSelectedHeadline] = useState("");
@@ -67,6 +69,8 @@ const Index = () => {
           style: selectedStyle,
           brandName: brandContext.brandName,
           description: brandContext.description,
+          logoUrl: brandContext.logoUrl,
+          productImageUrl: brandContext.productImageUrl,
         },
       });
       if (error) throw error;

@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import ImageUpload from "@/components/ImageUpload";
 import type { BrandContext } from "@/types/marketing";
 
 const industries = [
@@ -128,6 +129,24 @@ const BrandContextStep = ({ data, onChange, onNext }: BrandContextStepProps) => 
                 onChange({ ...data, targetAudience: e.target.value })
               }
               className="bg-secondary/50 border-border/50 focus:border-primary"
+            />
+          </div>
+
+          {/* Image Uploads */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+            <ImageUpload
+              label="Brand Logo"
+              sublabel="Optional · Used in ad design"
+              imageUrl={data.logoUrl}
+              onUpload={(url) => onChange({ ...data, logoUrl: url })}
+              onRemove={() => onChange({ ...data, logoUrl: null })}
+            />
+            <ImageUpload
+              label="Product Image"
+              sublabel="Optional · AI will use as reference"
+              imageUrl={data.productImageUrl}
+              onUpload={(url) => onChange({ ...data, productImageUrl: url })}
+              onRemove={() => onChange({ ...data, productImageUrl: null })}
             />
           </div>
 

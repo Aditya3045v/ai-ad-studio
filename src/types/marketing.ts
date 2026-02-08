@@ -3,6 +3,8 @@ export interface BrandContext {
   industry: string;
   description: string;
   targetAudience: string;
+  logoUrl: string | null;
+  productImageUrl: string | null;
 }
 
 export interface Headline {
