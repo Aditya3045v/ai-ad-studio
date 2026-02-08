@@ -2,60 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 222 47% 6%;
-    --foreground: 213 31% 91%;
+    --bg-dark: 240 33% 3%;
+    --background: 240 33% 3%;
+    --foreground: 0 0% 100%;
 
-    --card: 222 41% 9%;
-    --card-foreground: 213 31% 91%;
+    --card: 240 20% 6%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 222 41% 9%;
-    --popover-foreground: 213 31% 91%;
+    --popover: 240 20% 6%;
+    --popover-foreground: 0 0% 100%;
 
     --primary: 234 89% 74%;
-    --primary-foreground: 222 47% 6%;
+    --primary-foreground: 240 33% 3%;
 
-    --secondary: 222 30% 14%;
-    --secondary-foreground: 213 31% 91%;
+    --secondary: 240 10% 10%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 222 30% 14%;
-    --muted-foreground: 215 20% 55%;
+    --muted: 240 10% 10%;
+    --muted-foreground: 220 10% 56%;
 
-    --accent: 234 89% 74%;
-    --accent-foreground: 222 47% 6%;
+    --accent: 258 90% 66%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 222 30% 18%;
-    --input: 222 30% 18%;
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
     --ring: 234 89% 74%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 222 41% 9%;
-    --sidebar-foreground: 213 31% 91%;
-    --sidebar-primary: 234 89% 74%;
-    --sidebar-primary-foreground: 222 47% 6%;
-    --sidebar-accent: 222 30% 14%;
-    --sidebar-accent-foreground: 213 31% 91%;
-    --sidebar-border: 222 30% 18%;
-    --sidebar-ring: 234 89% 74%;
-
-    /* Custom tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(234 89% 74%), hsl(280 80% 65%));
-    --gradient-surface: linear-gradient(180deg, hsl(222 41% 10%), hsl(222 47% 7%));
-    --gradient-glow: radial-gradient(ellipse at 50% 0%, hsl(234 89% 74% / 0.15), transparent 60%);
-    --shadow-glow: 0 0 40px -10px hsl(234 89% 74% / 0.4);
-    --shadow-card: 0 4px 24px -4px hsl(222 47% 4% / 0.5);
+    --accent-blue: 217 91% 60%;
+    --accent-violet: 258 90% 66%;
+    --glass-border: 0 0% 100% / 0.08;
+    --glass-bg: 0 0% 100% / 0.03;
 
     --success: 152 69% 53%;
-    --success-foreground: 222 47% 6%;
+    --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 6%;
+    --warning-foreground: 0 0% 100%;
+
+    --sidebar-background: 240 20% 6%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 234 89% 74%;
+    --sidebar-primary-foreground: 240 33% 3%;
+    --sidebar-accent: 240 10% 10%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 100% / 0.08;
+    --sidebar-ring: 234 89% 74%;
   }
 }
 
@@ -65,26 +64,45 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 }
 
 @layer utilities {
-  .gradient-text {
-    @apply bg-clip-text text-transparent;
-    background-image: var(--gradient-primary);
-  }
-
-  .glow-border {
-    box-shadow: var(--shadow-glow);
+  .text-gradient {
+    background: linear-gradient(135deg, #FFCED8 0%, #D2A8FF 50%, #A371F7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
   .glass-surface {
-    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .step-indicator-active {
-    background-image: var(--gradient-primary);
+  .glass-border {
+    border-color: rgba(255, 255, 255, 0.08);
   }
+}
+
+/* Poster rotating gradient animation */
+@keyframes rotateGradient {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Scroll indicator line animation */
+@keyframes scrollPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
