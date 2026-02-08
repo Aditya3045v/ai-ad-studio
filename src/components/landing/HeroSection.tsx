@@ -1,56 +1,62 @@
 import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import Hls from "hls.js";
 
 interface HeroSectionProps {
   onScrollToSamples: () => void;
   onScrollToBuilder: () => void;
 }
 
-const FloatingPoster = ({
-  position,
-  gradient,
-}: {
-  position: string;
-  gradient: string;
-}) => (
-  <div
-    className={`absolute w-[140px] h-[200px] bg-[rgba(255,255,255,0.05)] rounded-xl border border-[rgba(255,255,255,0.08)] shadow-[0_20px_40px_rgba(0,0,0,0.5)] opacity-60 overflow-hidden transition-all duration-300 hover:opacity-80 hover:scale-105 hover:z-10 cursor-pointer ${position}`}
-  >
-    <div className="w-full h-full bg-gradient-to-br from-[rgba(255,255,255,0.1)] to-[rgba(255,255,255,0.01)] relative overflow-hidden">
-      <div
-        className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] animate-[rotateGradient_10s_linear_infinite]"
-        style={{
-          background: gradient,
-        }}
-      />
-    </div>
-  </div>
-);
+const HLS_URL =
+  "https://customer-cbeadsgr09pnsezs.cloudflarestream.com/e923e67d71fed3e0853ec57f0348451e/manifest/video.m3u8";
+
+const HeroVideo = () => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      hls.loadSource(HLS_URL);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+      });
+      return () => hls.destroy();
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = HLS_URL;
+      video.addEventListener("loadedmetadata", () => {
+        video.play().catch(() => {});
+      });
+    }
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      className="absolute inset-0 w-full h-full object-cover"
+      autoPlay
+      muted
+      loop
+      playsInline
+    />
+  );
+};
 
 const HeroSection = ({ onScrollToSamples, onScrollToBuilder }: HeroSectionProps) => {
   return (
     <section className="relative h-screen w-full flex flex-col justify-center items-center text-center overflow-hidden pt-20">
-      {/* Background blobs */}
+      {/* Background Video */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-40 bg-[#4F46E5] -top-[100px] -right-[100px]" />
-        <div className="absolute w-[500px] h-[500px] rounded-full blur-[80px] opacity-40 bg-[#7C3AED] -bottom-[150px] -left-[150px]" />
-
-        {/* Floating Posters */}
-        <FloatingPoster
-          position="top-[15%] left-[10%] -rotate-12"
-          gradient="radial-gradient(circle, rgba(79, 70, 229, 0.3) 0%, transparent 60%)"
+        <HeroVideo />
+        {/* Subtle blur + dark overlay — CSS filter on a thin overlay, not on video itself */}
+        <div
+          className="absolute inset-0"
+          style={{ backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}
         />
-        <FloatingPoster
-          position="top-[15%] right-[10%] rotate-12"
-          gradient="radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, transparent 60%)"
-        />
-        <FloatingPoster
-          position="bottom-[20%] left-[8%] rotate-[8deg] hidden lg:block"
-          gradient="radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, transparent 60%)"
-        />
-        <FloatingPoster
-          position="bottom-[20%] right-[8%] -rotate-[8deg] hidden lg:block"
-          gradient="radial-gradient(circle, rgba(245, 158, 11, 0.3) 0%, transparent 60%)"
-        />
+        <div className="absolute inset-0 bg-background/75" />
       </div>
 
       {/* Hero Content */}
