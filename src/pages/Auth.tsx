@@ -108,12 +108,8 @@ const Auth = () => {
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <span className="font-heading text-xl font-bold">AdGen</span>
+              <img src="/favicon.png" alt="AdGenX" className="w-7 h-7 rounded" />
+              <span className="font-heading text-xl font-bold">AdGenX</span>
             </div>
             <h1 className="font-heading text-2xl font-semibold mb-2">
               {isSignUp ? "Create your account" : "Welcome back"}
