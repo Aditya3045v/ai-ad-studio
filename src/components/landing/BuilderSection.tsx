@@ -92,6 +92,8 @@ const BuilderSection = ({ sectionRef }: BuilderSectionProps) => {
       try {
         let productImageBase64: string | undefined;
         let productImageMimeType: string | undefined;
+        let logoImageBase64: string | undefined;
+        let logoImageMimeType: string | undefined;
 
         if (productFile) {
           productImageBase64 = await fileToBase64(productFile);
@@ -99,6 +101,11 @@ const BuilderSection = ({ sectionRef }: BuilderSectionProps) => {
           setCurrentStep(0);
         } else {
           setCurrentStep(1);
+        }
+
+        if (logoFile) {
+          logoImageBase64 = await fileToBase64(logoFile);
+          logoImageMimeType = logoFile.type;
         }
 
         // Simulate step progression with timing
@@ -120,12 +127,24 @@ const BuilderSection = ({ sectionRef }: BuilderSectionProps) => {
             brandColor,
             productImageBase64,
             productImageMimeType,
+            logoImageBase64,
+            logoImageMimeType,
           },
         });
 
         clearInterval(stepTimer);
 
-        if (error) throw error;
+        if (error) {
+          // Check for rate limit or payment errors
+          const errorMsg = error.message || "";
+          if (errorMsg.includes("429") || errorMsg.toLowerCase().includes("rate limit")) {
+            throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+          }
+          if (errorMsg.includes("402") || errorMsg.toLowerCase().includes("credit")) {
+            throw new Error("AI credits exhausted. Please add credits to your workspace.");
+          }
+          throw error;
+        }
         if (data?.error) throw new Error(data.error);
 
         setCurrentStep(3);
@@ -141,7 +160,7 @@ const BuilderSection = ({ sectionRef }: BuilderSectionProps) => {
         setTimeout(() => setIsGenerating(false), 500);
       }
     },
-    [brandName, industry, theme, headlineText, visualStyle, brandColor, productFile, toast]
+    [brandName, industry, theme, headlineText, visualStyle, brandColor, productFile, logoFile, toast]
   );
 
   const handleDownload = () => {

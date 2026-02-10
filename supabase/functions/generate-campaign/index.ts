@@ -2,8 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 interface CampaignRequest {
   brandName: string;
@@ -14,6 +16,28 @@ interface CampaignRequest {
   brandColor: string;
   productImageBase64?: string;
   productImageMimeType?: string;
+  logoImageBase64?: string;
+  logoImageMimeType?: string;
+}
+
+async function callLovableAI(apiKey: string, body: Record<string, unknown>) {
+  const resp = await fetch(GATEWAY, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    if (resp.status === 429) throw { status: 429, message: "Rate limit exceeded. Please try again shortly." };
+    if (resp.status === 402) throw { status: 402, message: "AI credits exhausted. Please add credits in your workspace." };
+    const t = await resp.text();
+    console.error("AI gateway error:", resp.status, t);
+    throw { status: 500, message: `AI gateway error: ${resp.status}` };
+  }
+  return resp.json();
 }
 
 serve(async (req) => {
@@ -21,73 +45,44 @@ serve(async (req) => {
 
   try {
     const {
-      brandName,
-      industry,
-      theme,
-      headlineText,
-      visualStyle,
-      brandColor,
-      productImageBase64,
-      productImageMimeType,
+      brandName, industry, theme, headlineText, visualStyle, brandColor,
+      productImageBase64, productImageMimeType, logoImageBase64, logoImageMimeType,
     }: CampaignRequest = await req.json();
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw { status: 500, message: "LOVABLE_API_KEY is not configured" };
 
     // ============================
-    // STEP 1: Analyze product image via OpenRouter Vision (if provided)
+    // STEP 1: Analyze product image with Gemini Flash (if provided)
     // ============================
     let productContext = "";
 
     if (productImageBase64 && productImageMimeType) {
-      console.log("Step 1: Analyzing product image with vision...");
-
-      const visionMessages: any[] = [
-        {
+      console.log("Step 1: Analyzing product image...");
+      const visionData = await callLovableAI(LOVABLE_API_KEY, {
+        model: "google/gemini-2.5-flash",
+        messages: [{
           role: "user",
           content: [
             {
               type: "text",
-              text: `You are an expert product analyst. Analyze this product image in detail. Describe the product, its colors, textures, materials, shape, and any notable features. Be specific and vivid so a text-to-image AI can recreate this product accurately in a new scene. Keep your description to 3-4 sentences.`,
+              text: "You are an expert product analyst. Analyze this product image in detail. Describe the product, its colors, textures, materials, shape, and any notable features. Be specific and vivid so a text-to-image AI can recreate this product accurately in a new scene. Keep your description to 3-4 sentences.",
             },
             {
               type: "image_url",
-              image_url: {
-                url: `data:${productImageMimeType};base64,${productImageBase64}`,
-              },
+              image_url: { url: `data:${productImageMimeType};base64,${productImageBase64}` },
             },
           ],
-        },
-      ];
-
-      const visionResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.0-flash-001",
-          messages: visionMessages,
-          max_tokens: 500,
-        }),
+        }],
       });
-
-      if (!visionResp.ok) {
-        const errText = await visionResp.text();
-        console.error("Vision API error:", visionResp.status, errText);
-        throw new Error(`Vision analysis failed: ${visionResp.status}`);
-      }
-
-      const visionData = await visionResp.json();
       productContext = visionData.choices?.[0]?.message?.content || "";
       console.log("Product context:", productContext);
     }
 
     // ============================
-    // STEP 2: Engineer a prompt for image generation via OpenRouter
+    // STEP 2: Engineer image generation prompt
     // ============================
-    console.log("Step 2: Engineering image generation prompt...");
+    console.log("Step 2: Engineering image prompt...");
 
     const styleDescriptions: Record<string, string> = {
       Photorealistic: "photorealistic, high-end commercial photography, studio lighting, sharp details",
@@ -95,17 +90,18 @@ serve(async (req) => {
       Pastel: "soft pastel colors, minimalist, clean, gentle gradients, calming aesthetic",
       Luxury: "luxury, gold accents, rich textures, premium feel, elegant composition, dark tones",
     };
-
     const styleDesc = styleDescriptions[visualStyle] || styleDescriptions.Photorealistic;
 
     const productSection = productContext
       ? `\n\nIMPORTANT PRODUCT CONTEXT (from analyzing the uploaded product photo):\n${productContext}\nYou MUST incorporate this exact product into the scene naturally.`
       : "";
 
-    const promptEngineerMessages = [
-      {
-        role: "system",
-        content: `You are a Prompt Engineer for an AI image generator. Your goal is to write a single, detailed prompt that results in a 1080x1080 square marketing image. The image must:
+    const promptData = await callLovableAI(LOVABLE_API_KEY, {
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `You are a Prompt Engineer for an AI image generator. Write a single, detailed prompt for a 1:1 square marketing image. The image must:
 1. Feature the text "${headlineText}" rendered clearly and legibly as part of the design
 2. Match the visual style: ${styleDesc}
 3. Use the brand color ${brandColor} as a dominant accent
@@ -118,154 +114,96 @@ Rules:
 - The text "${headlineText}" must appear spelled correctly and be the focal point
 - Keep the prompt under 200 words
 - Describe specific composition, lighting, typography style, and visual elements`,
-      },
-      {
-        role: "user",
-        content: `Brand: ${brandName}
-Industry: ${industry}
-Theme/Occasion: ${theme}
-Headline Text: "${headlineText}"
-Visual Style: ${visualStyle}
-Brand Color: ${brandColor}${productSection}
-
-Write the image generation prompt now.`,
-      },
-    ];
-
-    const promptResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
-        messages: promptEngineerMessages,
-        max_tokens: 400,
-      }),
+        },
+        {
+          role: "user",
+          content: `Brand: ${brandName}\nIndustry: ${industry}\nTheme/Occasion: ${theme}\nHeadline Text: "${headlineText}"\nVisual Style: ${visualStyle}\nBrand Color: ${brandColor}${productSection}\n\nWrite the image generation prompt now.`,
+        },
+      ],
     });
 
-    if (!promptResp.ok) {
-      const errText = await promptResp.text();
-      console.error("Prompt engineering error:", promptResp.status, errText);
-      throw new Error(`Prompt engineering failed: ${promptResp.status}`);
-    }
-
-    const promptData = await promptResp.json();
     const imagenPrompt = promptData.choices?.[0]?.message?.content?.trim() || "";
     console.log("Engineered prompt:", imagenPrompt);
-
-    if (!imagenPrompt) throw new Error("Failed to generate image prompt");
+    if (!imagenPrompt) throw { status: 500, message: "Failed to generate image prompt" };
 
     // ============================
-    // STEP 3: Generate image via OpenRouter (sourceful/riverflow-v2-pro)
+    // STEP 3: Generate image with Gemini 2.5 Flash Image
     // ============================
-    console.log("Step 3: Generating image with sourceful/riverflow-v2-pro...");
+    console.log("Step 3: Generating image with gemini-2.5-flash-image...");
 
-    const imageGenResp = await fetch("https://openrouter.ai/api/v1/images/generations", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "sourceful/riverflow-v2-pro",
-        prompt: imagenPrompt,
-        n: 1,
-        size: "1024x1024",
-        response_format: "b64_json",
-      }),
+    // Build message content - include product/logo images as context for the generation
+    const imageGenContent: any[] = [{ type: "text", text: imagenPrompt }];
+
+    if (productImageBase64 && productImageMimeType) {
+      imageGenContent.push({
+        type: "image_url",
+        image_url: { url: `data:${productImageMimeType};base64,${productImageBase64}` },
+      });
+    }
+
+    if (logoImageBase64 && logoImageMimeType) {
+      imageGenContent.push({
+        type: "image_url",
+        image_url: { url: `data:${logoImageMimeType};base64,${logoImageBase64}` },
+      });
+    }
+
+    const imageData = await callLovableAI(LOVABLE_API_KEY, {
+      model: "google/gemini-2.5-flash-image",
+      messages: [{ role: "user", content: imageGenContent }],
+      modalities: ["image", "text"],
     });
 
-    if (!imageGenResp.ok) {
-      const errText = await imageGenResp.text();
-      console.error("Image generation error:", imageGenResp.status, errText);
-      throw new Error(`Image generation failed: ${imageGenResp.status} - ${errText}`);
-    }
-
-    const imageGenData = await imageGenResp.json();
-    console.log("Image gen response keys:", Object.keys(imageGenData));
-
-    // Handle both OpenAI-style responses
-    let imageDataUrl = "";
-    if (imageGenData.data?.[0]?.b64_json) {
-      imageDataUrl = `data:image/png;base64,${imageGenData.data[0].b64_json}`;
-    } else if (imageGenData.data?.[0]?.url) {
-      imageDataUrl = imageGenData.data[0].url;
-    } else {
-      console.error("Unexpected image gen response:", JSON.stringify(imageGenData).slice(0, 500));
-      throw new Error("No image was generated");
+    const imageUrl = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!imageUrl) {
+      console.error("No image in response:", JSON.stringify(imageData).slice(0, 500));
+      throw { status: 500, message: "No image was generated" };
     }
 
     // ============================
-    // STEP 4: Generate matching caption via OpenRouter
+    // STEP 4: Generate caption with Gemini Flash
     // ============================
-    console.log("Step 4: Generating social media caption...");
+    console.log("Step 4: Generating caption...");
 
-    const captionMessages = [
-      {
-        role: "system",
-        content: `You are an expert social media copywriter. Generate a compelling social media caption for a marketing post. The caption should:
+    let caption = "";
+    try {
+      const captionData = await callLovableAI(LOVABLE_API_KEY, {
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert social media copywriter. Generate a compelling social media caption for a marketing post. The caption should:
 1. Be engaging and on-brand
 2. Include 2-3 relevant hashtags at the end
 3. Be between 50-150 words
 4. Match the tone of the campaign theme
 5. Include a clear call to action
 Output ONLY the caption text, nothing else.`,
-      },
-      {
-        role: "user",
-        content: `Brand: ${brandName}
-Industry: ${industry}
-Theme/Occasion: ${theme}
-Main Headline: "${headlineText}"
-Visual Style: ${visualStyle}
-
-Write a matching social media caption.`,
-      },
-    ];
-
-    const captionResp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.0-flash-001",
-        messages: captionMessages,
-        max_tokens: 300,
-      }),
-    });
-
-    let caption = "";
-    if (captionResp.ok) {
-      const captionData = await captionResp.json();
+          },
+          {
+            role: "user",
+            content: `Brand: ${brandName}\nIndustry: ${industry}\nTheme/Occasion: ${theme}\nMain Headline: "${headlineText}"\nVisual Style: ${visualStyle}\n\nWrite a matching social media caption.`,
+          },
+        ],
+      });
       caption = captionData.choices?.[0]?.message?.content?.trim() || "";
-    } else {
-      console.warn("Caption generation failed, continuing without caption");
+    } catch (e) {
+      console.warn("Caption generation failed, continuing without caption:", e);
     }
 
     console.log("Campaign generation complete!");
 
     return new Response(
-      JSON.stringify({
-        imageUrl: imageDataUrl,
-        caption,
-        prompt: imagenPrompt,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ imageUrl, caption, prompt: imagenPrompt }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
+  } catch (e: any) {
     console.error("generate-campaign error:", e);
+    const status = e?.status || 500;
+    const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: message }),
+      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
