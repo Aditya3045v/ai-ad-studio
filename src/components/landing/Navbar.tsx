@@ -19,12 +19,8 @@ const Navbar = ({ onScrollToBuilder }: NavbarProps) => {
   return (
     <nav className="fixed top-0 w-full px-6 md:px-12 py-6 flex justify-between items-center z-[100] backdrop-blur-[10px]">
       <div className="flex items-center gap-3 font-heading font-bold text-lg tracking-tight">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span>AdGen</span>
+        <img src="/favicon.png" alt="AdGenX" className="w-7 h-7 rounded-md" />
+        <span>AdGenX</span>
       </div>
 
       <div className="hidden md:flex gap-8">
